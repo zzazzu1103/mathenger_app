@@ -37,15 +37,13 @@ class WorksheetOptions:
     number_format: str = "{n}."
 
 
-def build_worksheet(
-    source: HwpSource,
+def build_section(
     prologue: bytes,
     problem_blobs: list[bytes],
     empty_para: bytes,
     options: WorksheetOptions | None = None,
-    preview_texts: list[str] | None = None,
 ) -> bytes:
-    """새 학습지 HWP 파일 바이트를 만든다."""
+    """선택한 문제 블록들로 새 본문(Section) 레코드 스트림을 만든다."""
     options = options or WorksheetOptions()
     if not problem_blobs:
         raise ValueError("선택된 문제가 없습니다.")
@@ -71,6 +69,23 @@ def build_worksheet(
     section = bytes(body)
     # 조립 결과가 올바른 레코드 스트림인지 검증 (깨진 파일 생성 방지)
     parse_records(section)
+    return section
+
+
+def build_worksheet(
+    source: HwpSource,
+    prologue: bytes,
+    problem_blobs: list[bytes],
+    empty_para: bytes,
+    options: WorksheetOptions | None = None,
+    preview_texts: list[str] | None = None,
+) -> bytes:
+    """컨테이너를 새로 써서 학습지 HWP를 만든다 (실험적 경로).
+
+    한글의 컨테이너 파서 호환성이 완전히 검증되지 않아, 실제 생성은
+    patcher.patch_streams(원본 제자리 패치)를 쓰는 쪽을 권장한다.
+    """
+    section = build_section(prologue, problem_blobs, empty_para, options)
 
     writer = CfbWriter(root_clsid=source.root_clsid)
     written = set()
@@ -82,7 +97,7 @@ def build_worksheet(
     put("FileHeader", source.streams["FileHeader"])
     put("BodyText/Section0", source.compress_body(section))
     if preview_texts is not None:
-        put("PrvText", _make_prvtext(preview_texts))
+        put("PrvText", make_prvtext(preview_texts))
         written.add("PrvText")
 
     for name, data in source.streams.items():
@@ -125,6 +140,6 @@ def _make_text_para(empty_para_template: bytes, text: str) -> bytes:
     return bytes(out)
 
 
-def _make_prvtext(texts: list[str], limit: int = 1000) -> bytes:
+def make_prvtext(texts: list[str], limit: int = 1000) -> bytes:
     joined = "\r\n".join(t.strip() for t in texts if t.strip())
     return joined[:limit].encode("utf-16-le")

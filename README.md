@@ -48,8 +48,12 @@ python -m mathenger.cli build 학습지.hwp 12 3 33   # 문제 ID 순서대로
   (①~⑤ 선택지 문단, "구하시오" 문단)를 조합해 문제 단위로 자릅니다.
   배점(`[4점]`)만 있는 문단이나 뒤따르는 그림 문단은 앞 문제에 붙입니다.
 - **서식 보존**: 글꼴·문단 모양·수식이 참조하는 DocInfo와 그림(BinData)을
-  원본에서 통째로 복사하므로 참조가 전부 유효합니다.
-- **OLE 컨테이너**: 자체 구현한 CFB 라이터로 표준 HWP 5.0 컨테이너를 만듭니다.
+  원본에서 통째로 유지하므로 참조가 전부 유효합니다.
+- **컨테이너 호환성**: 학습지 파일은 원본 파일을 **제자리 패치**해 만듭니다.
+  한글이 정상적으로 여는 원본의 컨테이너 구조(FAT·디렉터리)를 바이트 그대로
+  두고 본문(Section0)과 미리보기(PrvText) 내용만 교체하므로, 생성 파일의
+  호환성이 원본과 동일합니다. 그래서 **학습지 파일 크기는 문제 수와 무관하게
+  원본 파일과 같습니다** (그림 저장소를 통째로 유지하기 때문).
 
 ## 한계 (현재 버전)
 
@@ -79,8 +83,9 @@ MATHENGER_TEST_HWP=문제모음.hwp MATHENGER_TEST_XLSX=정리.xlsx python -m py
 | `mathenger/hwp/records.py` | HWP 5.0 레코드 파싱/직렬화 |
 | `mathenger/hwp/reader.py` | OLE 컨테이너 읽기 (olefile) |
 | `mathenger/hwp/splitter.py` | 문제 단위 분리 알고리즘 |
-| `mathenger/hwp/cfb.py` | OLE(CFB) 컨테이너 쓰기 (자체 구현) |
-| `mathenger/hwp/builder.py` | 학습지 HWP 조립 |
+| `mathenger/hwp/patcher.py` | 원본 컨테이너 제자리 패치 (학습지 생성에 사용) |
+| `mathenger/hwp/cfb.py` | OLE(CFB) 컨테이너 쓰기 (자체 구현, 실험적) |
+| `mathenger/hwp/builder.py` | 학습지 본문(Section) 조립 |
 | `mathenger/db.py`, `mathenger/importer.py` | SQLite 저장소·엑셀 임포트 |
 | `mathenger/worksheet.py` | 학습지 생성 서비스 |
 | `app.py`, `templates/`, `static/` | Flask 웹 UI |

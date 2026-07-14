@@ -1,11 +1,18 @@
-"""장바구니 문제들로 학습지 HWP를 생성하는 서비스 레이어."""
+"""장바구니 문제들로 학습지 HWP를 생성하는 서비스 레이어.
+
+컨테이너는 원본 파일을 '제자리 패치'해서 만든다: 한글이 정상적으로 여는
+원본 파일의 구조(FAT/디렉터리)를 그대로 두고 본문(Section0)과 미리보기
+텍스트(PrvText)의 내용만 교체한다. 그래서 생성 파일의 컨테이너 호환성이
+원본과 동일하게 보장된다.
+"""
 
 from __future__ import annotations
 
 import sqlite3
 
 from . import db
-from .hwp.builder import WorksheetOptions, build_worksheet
+from .hwp.builder import WorksheetOptions, build_section, make_prvtext
+from .hwp.patcher import PatchTooLarge, patch_streams
 from .hwp.reader import HwpSource
 from .hwp.splitter import split_problems
 
@@ -33,14 +40,30 @@ def generate_worksheet(
         )
 
     source_id = source_ids.pop()
-    source = HwpSource.from_bytes(db.get_source_file(conn, source_id))
+    original = db.get_source_file(conn, source_id)
+    source = HwpSource.from_bytes(original)
     split = split_problems(source.body_section())
 
-    return build_worksheet(
-        source=source,
+    section = build_section(
         prologue=split.prologue,
         problem_blobs=[p["blob"] for p in problems],
         empty_para=split.empty_para,
         options=options,
-        preview_texts=[p["text"] for p in problems],
     )
+    compressed = source.compress_body(section, level=9)
+
+    try:
+        return patch_streams(
+            original,
+            {
+                "Section0": compressed,
+                "PrvText": make_prvtext([p["text"] for p in problems]),
+            },
+            allow_truncate={"PrvText"},
+        )
+    except PatchTooLarge as exc:
+        raise ValueError(
+            "학습지 본문이 원본 문서보다 커서 만들 수 없습니다. "
+            "문제 수를 줄여서 다시 시도해 주세요. "
+            f"({exc})"
+        ) from exc

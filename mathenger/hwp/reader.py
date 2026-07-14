@@ -72,10 +72,10 @@ class HwpSource:
     def section_count(self) -> int:
         return sum(1 for k in self.streams if k.startswith("BodyText/Section"))
 
-    def compress_body(self, data: bytes) -> bytes:
+    def compress_body(self, data: bytes, level: int = zlib.Z_DEFAULT_COMPRESSION) -> bytes:
         if not self.compressed:
             return data
-        co = zlib.compressobj(level=zlib.Z_DEFAULT_COMPRESSION, wbits=-15)
+        co = zlib.compressobj(level=level, wbits=-15)
         return co.compress(data) + co.flush()
 
 
