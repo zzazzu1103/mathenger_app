@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Mathenger{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('index') }}">📐 Mathenger <span>문제은행 · 학습지 생성기</span></a>
+    <nav>
+      <a href="{{ url_for('index') }}">문제 검색</a>
+      <a href="{{ url_for('import_view') }}">가져오기</a>
+      <a class="cart-link" href="{{ url_for('cart_view') }}">🧺 담은 문제 <b>{{ cart|length }}</b></a>
+    </nav>
+  </header>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flashes">
+        {% for category, message in messages %}
+          <div class="flash flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <main>{% block content %}{% endblock %}</main>
+
+  <footer>
+    <p>원본 한글 파일의 수식·표·그림을 바이트 그대로 보존해 학습지를 만듭니다.</p>
+  </footer>
+</body>
+</html>

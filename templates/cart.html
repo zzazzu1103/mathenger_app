@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}담은 문제 — Mathenger{% endblock %}
+{% block content %}
+
+<h2>담은 문제 {{ problems|length }}개</h2>
+
+{% if not problems %}
+  <p class="muted">아직 담은 문제가 없습니다. <a href="{{ url_for('index') }}">문제 검색</a>에서 담아 주세요.</p>
+{% else %}
+
+{% if multi_source %}
+  <div class="flash flash-warn">서로 다른 원본 파일의 문제가 섞여 있습니다. 한 학습지는 같은 원본의 문제로만 만들 수 있으니 일부를 빼 주세요.</div>
+{% endif %}
+
+<table class="problems">
+  <thead>
+    <tr><th>#</th><th>출처</th><th>과목 / 단원</th><th>문제 미리보기</th><th>순서</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for p in problems %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td class="nowrap">{{ p['year'] }} {{ p['month'] }} {{ p['origin'] }} {{ p['number'] }}</td>
+      <td class="nowrap">{{ p['subject'] }} · {{ p['unit_mid'] }}</td>
+      <td class="preview"><a href="{{ url_for('problem_detail', problem_id=p['id']) }}">{{ p['text'][:70] }}…</a></td>
+      <td class="nowrap">
+        <form method="post" action="{{ url_for('cart_move') }}" class="inline">
+          <input type="hidden" name="problem_id" value="{{ p['id'] }}">
+          <button name="direction" value="up" {% if loop.first %}disabled{% endif %}>▲</button>
+          <button name="direction" value="down" {% if loop.last %}disabled{% endif %}>▼</button>
+        </form>
+      </td>
+      <td>
+        <form method="post" action="{{ url_for('cart_remove') }}" class="inline">
+          <input type="hidden" name="problem_id" value="{{ p['id'] }}">
+          <button class="danger">빼기</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<form method="post" action="{{ url_for('cart_clear') }}" class="inline">
+  <button class="danger">전부 비우기</button>
+</form>
+
+<section class="generate-box">
+  <h3>학습지 만들기</h3>
+  <form method="post" action="{{ url_for('generate') }}">
+    <label>파일 이름
+      <input type="text" name="filename" placeholder="비우면 '학습지_오늘날짜.hwp'로 저장">
+    </label>
+    <label>문제 배치
+      <select name="separator">
+        <option value="column" selected>문제마다 새 단(칼럼)에서 시작 — 원본과 같은 2단 배치</option>
+        <option value="page">문제마다 새 쪽에서 시작</option>
+        <option value="spacing">이어서 배치 (빈 줄 간격만)</option>
+      </select>
+    </label>
+    <label>빈 줄 수 (이어서 배치일 때)
+      <input type="number" name="spacing" value="2" min="0" max="20">
+    </label>
+    <label class="checkbox">
+      <input type="checkbox" name="numbering" checked> 문제 앞에 번호(1. 2. 3. …) 붙이기
+    </label>
+    <button type="submit" class="primary big" {% if multi_source %}disabled{% endif %}>📄 학습지 .hwp 다운로드</button>
+  </form>
+</section>
+
+{% endif %}
+{% endblock %}

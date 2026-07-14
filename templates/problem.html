@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}문제 상세 — Mathenger{% endblock %}
+{% block content %}
+
+<p><a href="javascript:history.back()">← 돌아가기</a></p>
+
+<h2>{{ p['year'] }} {{ p['month'] }} {{ p['origin'] }} {{ p['number'] }}
+  <small class="muted">({{ p['source_name'] }} · {{ p['seq'] }}번째 문제)</small></h2>
+
+<div class="detail-grid">
+  <section class="problem-text">
+    <h3>문제 본문 (텍스트 미리보기)</h3>
+    <p class="muted small">수식·그림 자리는 생략되어 보입니다. 실제 학습지에는 원본 그대로 들어갑니다.</p>
+    <pre>{{ p['text'] }}</pre>
+  </section>
+
+  <section class="meta">
+    <h3>메타데이터</h3>
+    <table class="kv">
+      {% for key in ['subject','unit_major','unit_mid','unit_small','track','idea','calc_point','caution'] %}
+        {% if p[key] %}<tr><th>{{ labels[key] }}</th><td>{{ p[key] }}</td></tr>{% endif %}
+      {% endfor %}
+    </table>
+
+    {% if p['id'] in cart %}
+      <p>✔ 이미 담겨 있습니다.</p>
+      <form method="post" action="{{ url_for('cart_remove') }}">
+        <input type="hidden" name="problem_id" value="{{ p['id'] }}">
+        <button class="danger">장바구니에서 빼기</button>
+      </form>
+    {% else %}
+      <form method="post" action="{{ url_for('cart_add') }}">
+        <input type="hidden" name="problem_id" value="{{ p['id'] }}">
+        <button class="primary">이 문제 담기</button>
+      </form>
+    {% endif %}
+  </section>
+</div>
+
+{% endblock %}

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}문제 검색 — Mathenger{% endblock %}
+{% block content %}
+
+{% if not sources %}
+  <div class="empty-state">
+    <h2>아직 등록된 문제가 없습니다</h2>
+    <p>먼저 <a href="{{ url_for('import_view') }}">가져오기</a>에서 한글(.hwp) 파일과 정리 엑셀(.xlsx)을 올려 주세요.</p>
+  </div>
+{% else %}
+
+<form class="search-form" method="get" action="{{ url_for('index') }}">
+  <div class="search-row">
+    <input type="text" name="q" value="{{ keyword }}" placeholder="키워드 (문제 본문·아이디어·포인트에서 검색)">
+    <button type="submit" class="primary">검색</button>
+  </div>
+  <div class="filter-row">
+    {% for key, label in [('subject','과목'), ('unit_major','대단원'), ('unit_mid','중단원'), ('unit_small','소단원'), ('origin','출처'), ('year','연도')] %}
+      <label>{{ label }}
+        <select name="{{ key }}">
+          <option value="">전체</option>
+          {% for value in options[key] %}
+            <option value="{{ value }}" {% if filters[key] == value %}selected{% endif %}>{{ value }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    {% endfor %}
+  </div>
+</form>
+
+{% if searched %}
+  <div class="result-head">
+    <h2>검색 결과 {{ results|length }}건</h2>
+    {% if results %}
+    <button type="submit" form="add-form" class="primary">선택한 문제 담기</button>
+    {% endif %}
+  </div>
+
+  {% if results %}
+  <form id="add-form" method="post" action="{{ url_for('cart_add') }}">
+  <table class="problems">
+    <thead>
+      <tr>
+        <th class="col-check"><input type="checkbox" onclick="document.querySelectorAll('.pchk').forEach(c=>c.checked=this.checked)"></th>
+        <th>출처</th><th>과목 / 단원</th><th>문제 미리보기</th><th>아이디어</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in results %}
+      <tr class="{{ 'in-cart' if p['id'] in cart }}">
+        <td class="col-check">
+          {% if p['id'] in cart %}✔{% else %}
+          <input class="pchk" type="checkbox" name="problem_id" value="{{ p['id'] }}">
+          {% endif %}
+        </td>
+        <td class="nowrap">{{ p['year'] }} {{ p['month'] }}<br>{{ p['origin'] }} {{ p['number'] }}</td>
+        <td class="nowrap">{{ p['subject'] }}<br><small>{{ p['unit_mid'] }}{% if p['unit_small'] %} · {{ p['unit_small'] }}{% endif %}</small></td>
+        <td class="preview"><a href="{{ url_for('problem_detail', problem_id=p['id']) }}">{{ p['text'][:90] }}{% if p['text']|length > 90 %}…{% endif %}</a></td>
+        <td class="idea">{{ p['idea'] }}</td>
+        <td class="nowrap">
+          {% if p['id'] not in cart %}
+          <button type="submit" name="problem_id" value="{{ p['id'] }}" formaction="{{ url_for('cart_add') }}">담기</button>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </form>
+  {% else %}
+    <p class="muted">조건에 맞는 문제가 없습니다.</p>
+  {% endif %}
+{% else %}
+  <div class="hint">
+    <p>필터를 고르거나 키워드를 입력하고 <b>검색</b>을 누르세요. 검색 없이 전체를 보려면 그냥 검색을 누르면 됩니다.</p>
+  </div>
+{% endif %}
+
+{% endif %}
+{% endblock %}

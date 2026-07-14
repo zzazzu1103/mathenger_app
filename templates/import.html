@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}가져오기 — Mathenger{% endblock %}
+{% block content %}
+
+<h2>문제 파일 가져오기</h2>
+
+<div class="import-help">
+  <p>문제가 모인 <b>한글(.hwp)</b> 파일과, 문제 순서대로 정리된 <b>엑셀(.xlsx)</b> 파일을 올려 주세요.</p>
+  <ul>
+    <li>엑셀의 <b>기출DB</b> 시트 1행(번호·연도·계열·출제월·출처·문항번호·과목·대단원·중단원·소단원·메인 아이디어·계산상의 포인트·표현상의 주의점) 순서를 그대로 사용합니다.</li>
+    <li>엑셀 행 순서와 한글 파일의 문제 순서가 같아야 합니다 (1행 ↔ 첫 번째 문제).</li>
+    <li>엑셀 없이 한글 파일만 올리면 본문 텍스트로만 검색할 수 있습니다.</li>
+  </ul>
+</div>
+
+<form method="post" enctype="multipart/form-data" class="import-form">
+  <label>한글 파일 (.hwp, 필수)
+    <input type="file" name="hwp" accept=".hwp" required>
+  </label>
+  <label>정리 엑셀 (.xlsx, 선택)
+    <input type="file" name="xlsx" accept=".xlsx">
+  </label>
+  <button type="submit" class="primary big">가져오기</button>
+</form>
+
+<h3>등록된 원본</h3>
+{% if sources %}
+<table class="problems">
+  <thead><tr><th>#</th><th>파일</th><th>문제 수</th><th>등록일</th><th></th></tr></thead>
+  <tbody>
+    {% for s in sources %}
+    <tr>
+      <td>{{ s['id'] }}</td>
+      <td>{{ s['name'] }}</td>
+      <td>{{ s['n_problems'] }}</td>
+      <td>{{ s['created_at'] }}</td>
+      <td>
+        <form method="post" action="{{ url_for('source_delete', source_id=s['id']) }}"
+              onsubmit="return confirm('이 원본과 딸린 문제 {{ s['n_problems'] }}개를 모두 삭제할까요?')">
+          <button class="danger">삭제</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">아직 없습니다.</p>
+{% endif %}
+
+{% endblock %}
