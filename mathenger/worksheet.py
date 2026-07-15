@@ -61,15 +61,14 @@ def generate_worksheet(
             section = section + split.empty_para
             compressed = source.compress_body(section, level=0)
 
+    # PrvText(미리보기 텍스트)는 건드리지 않는다: 재생성한 미리보기를 넣은
+    # 파일만 한글에서 '손상된 파일'로 거부되는 것이 실사용 테스트로 확인됨.
+    # 원본 미리보기가 남는 것은 표시용일 뿐이며 한글에서 저장하면 갱신된다.
     try:
         return patch_streams(
             original,
-            {
-                "Section0": compressed,
-                "PrvText": make_prvtext([p["text"] for p in problems]),
-            },
+            {"Section0": compressed},
             resize={"Section0"},
-            allow_truncate={"PrvText"},
         )
     except PatchTooLarge as exc:
         raise ValueError(
