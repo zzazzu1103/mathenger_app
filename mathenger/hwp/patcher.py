@@ -1,14 +1,17 @@
-"""원본 OLE 컨테이너를 구조 변경 없이 '제자리 패치'한다.
+"""원본 OLE 컨테이너를 구조 변경 최소화로 '제자리 패치'한다.
 
 새 컨테이너를 처음부터 쓰는 대신, 한글이 정상적으로 여는 원본 파일의
-바이트를 그대로 두고 지정한 스트림의 **내용만** 같은 자리(같은 섹터
-체인)에 덮어쓴다. 새 내용이 기존 스트림보다 짧으면 나머지는 0으로
-채운다. 컨테이너 구조(FAT/디렉터리/크기 필드)가 원본과 완전히 같아
-호환성 문제가 생길 수 없다.
+바이트를 유지한 채 지정한 스트림의 내용을 교체한다. 두 가지 방식:
 
-- 압축 본문(zlib raw deflate)은 마지막 블록에서 해제가 끝나므로 뒤에
-  붙는 0 패딩은 무시된다.
-- PrvText(UTF-16LE)는 0 패딩이 곧 널 종결이라 문제없다.
+- 고정 크기(fixed): 새 내용을 기존 크기에 맞춰 0으로 채운다.
+  구조는 전혀 바뀌지 않는다. (PrvText처럼 패딩이 무해한 스트림용)
+- 크기 조정(resize): 디렉터리의 크기 필드를 새 값으로 바꾸고 FAT 체인을
+  정석대로 줄인다(남는 섹터는 FREESECT). 스트림 끝이 정확히 새 내용
+  끝이 된다. (압축 본문처럼 꼬리표 위치가 중요한 스트림용)
+
+주의: OLE 규격상 4096바이트 미만 스트림은 미니 스트림에, 이상은 일반
+섹터에 놓이며 **리더는 크기 필드로 위치를 판별**한다. 따라서 resize로
+크기가 4096 경계를 넘나들면 안 된다 (PatchError).
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ import struct
 
 SECTOR = 512
 MINI_SECTOR = 64
+MINI_CUTOFF = 4096
 ENDOFCHAIN = 0xFFFFFFFE
 FREESECT = 0xFFFFFFFF
 
@@ -26,7 +30,7 @@ class PatchError(ValueError):
 
 
 class PatchTooLarge(PatchError):
-    """새 내용이 기존 스트림 공간보다 크다."""
+    """새 내용이 기존 스트림의 섹터 체인 용량보다 크다."""
 
 
 class _Cfb:
@@ -43,7 +47,7 @@ class _Cfb:
         (self.first_minifat,) = struct.unpack_from("<I", data, 60)
         (self.first_difat,) = struct.unpack_from("<I", data, 68)
 
-        # DIFAT → FAT 섹터 목록
+        # DIFAT → FAT 섹터 목록 (FAT 항목 위치 역산에 필요해 보관)
         difat: list[int] = [
             struct.unpack_from("<I", data, 76 + i * 4)[0] for i in range(109)
         ]
@@ -52,13 +56,18 @@ class _Cfb:
             off = self._sector_off(sid)
             difat += struct.unpack_from("<127I", data, off)
             (sid,) = struct.unpack_from("<I", data, off + 508)
+        self.fat_sectors = [s for s in difat if s not in (ENDOFCHAIN, FREESECT)]
         self.fat: list[int] = []
-        for s in difat:
-            if s in (ENDOFCHAIN, FREESECT):
-                continue
+        for s in self.fat_sectors:
             self.fat += struct.unpack_from("<128I", data, self._sector_off(s))
 
-        # 디렉터리 엔트리
+        # 미니 FAT (항목 위치 역산용으로 섹터 체인도 보관)
+        self.minifat_sectors = self._chain(self.first_minifat) if self.first_minifat not in (ENDOFCHAIN, FREESECT) else []
+        self.minifat: list[int] = []
+        for s in self.minifat_sectors:
+            self.minifat += struct.unpack_from("<128I", data, self._sector_off(s))
+
+        # 디렉터리 엔트리 (파일 오프셋 포함)
         self.entries: list[dict] = []
         sid = self.first_dir
         while sid not in (ENDOFCHAIN, FREESECT):
@@ -73,33 +82,26 @@ class _Cfb:
                 (start,) = struct.unpack_from("<I", data, e + 116)
                 (size,) = struct.unpack_from("<Q", data, e + 120)
                 self.entries.append(
-                    {"name": name, "type": data[e + 66], "start": start, "size": size}
+                    {"name": name, "type": data[e + 66], "start": start,
+                     "size": size, "offset": e}
                 )
             sid = self.fat[sid]
 
         root = self.entries[0]
         self.mini_chain = self._chain(root["start"]) if root.get("size") else []
 
-        # 미니 FAT
-        self.minifat: list[int] = []
-        sid = self.first_minifat
-        while sid not in (ENDOFCHAIN, FREESECT):
-            self.minifat += struct.unpack_from(
-                "<128I", data, self._sector_off(sid)
-            )
-            sid = self.fat[sid]
-
     def _sector_off(self, sid: int) -> int:
         return 512 + sid * SECTOR
 
-    def _chain(self, start: int) -> list[int]:
+    def _chain(self, start: int, table: list[int] | None = None) -> list[int]:
+        table = self.fat if table is None else table
         chain = []
         sid = start
         while sid not in (ENDOFCHAIN, FREESECT):
             chain.append(sid)
-            sid = self.fat[sid]
-            if len(chain) > len(self.fat):
-                raise PatchError("FAT 체인 순환")
+            sid = table[sid]
+            if len(chain) > len(table):
+                raise PatchError("체인 순환")
         return chain
 
     def _mini_off(self, mini_sid: int) -> int:
@@ -107,6 +109,18 @@ class _Cfb:
         byte_off = mini_sid * MINI_SECTOR
         big = self.mini_chain[byte_off // SECTOR]
         return self._sector_off(big) + byte_off % SECTOR
+
+    def _set_fat(self, index: int, value: int) -> None:
+        self.fat[index] = value
+        sector = self.fat_sectors[index // 128]
+        off = self._sector_off(sector) + (index % 128) * 4
+        struct.pack_into("<I", self.data, off, value)
+
+    def _set_minifat(self, index: int, value: int) -> None:
+        self.minifat[index] = value
+        sector = self.minifat_sectors[index // 128]
+        off = self._sector_off(sector) + (index % 128) * 4
+        struct.pack_into("<I", self.data, off, value)
 
     def find_stream(self, name: str) -> dict:
         found = [e for e in self.entries if e.get("name") == name and e.get("type") == 2]
@@ -116,46 +130,102 @@ class _Cfb:
             raise PatchError(f"같은 이름의 스트림이 여러 개: {name}")
         return found[0]
 
-    def patch_stream(self, name: str, new_data: bytes) -> None:
-        entry = self.find_stream(name)
-        size = entry["size"]
-        if len(new_data) > size:
-            raise PatchTooLarge(
-                f"'{name}' 새 내용({len(new_data):,}B)이 원본 공간({size:,}B)보다 큽니다."
-            )
-        padded = new_data + b"\x00" * (size - len(new_data))
-        if size < self.mini_cutoff:
-            # 미니 스트림: 64바이트 조각으로 나눠 쓴다
-            chain = []
-            sid = entry["start"]
-            while sid not in (ENDOFCHAIN, FREESECT):
-                chain.append(sid)
-                sid = self.minifat[sid]
-            for i, mini_sid in enumerate(chain):
-                part = padded[i * MINI_SECTOR : (i + 1) * MINI_SECTOR]
-                off = self._mini_off(mini_sid)
-                self.data[off : off + len(part)] = part
+    # ── 쓰기 ────────────────────────────────────────────────
+
+    def _write_chunks(self, entry: dict, payload: bytes) -> None:
+        """스트림의 (미니)섹터 체인에 payload를 앞에서부터 채운다."""
+        if entry["size"] < self.mini_cutoff:
+            chain = self._chain(entry["start"], self.minifat)
+            piece = MINI_SECTOR
+            offsets = [self._mini_off(s) for s in chain]
         else:
-            for i, sid in enumerate(self._chain(entry["start"])):
-                part = padded[i * SECTOR : (i + 1) * SECTOR]
-                off = self._sector_off(sid)
-                self.data[off : off + len(part)] = part
+            chain = self._chain(entry["start"])
+            piece = SECTOR
+            offsets = [self._sector_off(s) for s in chain]
+        for i, off in enumerate(offsets):
+            part = payload[i * piece : (i + 1) * piece]
+            if not part:
+                part = b"\x00" * piece  # 남는 섹터는 0으로 청소
+            elif len(part) < piece:
+                part = part + b"\x00" * (piece - len(part))
+            self.data[off : off + piece] = part
+
+    def patch_fixed(self, name: str, new_data: bytes) -> None:
+        """크기 필드 유지, 남는 공간은 0 패딩 (구조 무변경)."""
+        entry = self.find_stream(name)
+        if len(new_data) > entry["size"]:
+            raise PatchTooLarge(
+                f"'{name}' 새 내용({len(new_data):,}B)이 기존 크기({entry['size']:,}B)보다 큽니다."
+            )
+        self._write_chunks(entry, new_data + b"\x00" * (entry["size"] - len(new_data)))
+
+    def patch_resize(self, name: str, new_data: bytes) -> None:
+        """내용 교체 + 크기 필드 갱신 + 체인 축소. 4096 경계는 못 넘는다."""
+        entry = self.find_stream(name)
+        old_size = entry["size"]
+        new_size = len(new_data)
+        is_mini = old_size < self.mini_cutoff
+        if is_mini != (new_size < self.mini_cutoff):
+            raise PatchError(
+                f"'{name}' 크기 {old_size:,}B → {new_size:,}B 변경은 미니/일반 스트림 "
+                f"경계(4096B)를 넘어 지원하지 않습니다."
+            )
+        table_get = self.minifat if is_mini else self.fat
+        set_entry = self._set_minifat if is_mini else self._set_fat
+        piece = MINI_SECTOR if is_mini else SECTOR
+
+        chain = self._chain(entry["start"], table_get if is_mini else None)
+        capacity = len(chain) * piece
+        if new_size > capacity:
+            raise PatchTooLarge(
+                f"'{name}' 새 내용({new_size:,}B)이 체인 용량({capacity:,}B)보다 큽니다."
+            )
+
+        keep = max(1, -(-new_size // piece))
+        # 내용 쓰기 (남는 섹터 0 청소 포함)
+        self._write_chunks(entry, new_data + b"\x00" * (old_size - new_size if old_size > new_size else 0))
+        # 체인 축소
+        if keep < len(chain):
+            set_entry(chain[keep - 1], ENDOFCHAIN)
+            for sid in chain[keep:]:
+                set_entry(sid, FREESECT)
+        # 디렉터리 크기 필드 갱신
+        struct.pack_into("<Q", self.data, entry["offset"] + 120, new_size)
+        entry["size"] = new_size
+
+
+def stream_info(container: bytes, name: str) -> dict:
+    """스트림의 size/용량/미니 여부를 알려준다 (패치 전 사전 점검용)."""
+    cfb = _Cfb(container)
+    entry = cfb.find_stream(name)
+    is_mini = entry["size"] < cfb.mini_cutoff
+    if is_mini:
+        chain = cfb._chain(entry["start"], cfb.minifat)
+        capacity = len(chain) * MINI_SECTOR
+    else:
+        chain = cfb._chain(entry["start"])
+        capacity = len(chain) * SECTOR
+    return {"size": entry["size"], "capacity": capacity, "is_mini": is_mini}
 
 
 def patch_streams(
     container: bytes,
     replacements: dict[str, bytes],
     allow_truncate: set[str] | None = None,
+    resize: set[str] | None = None,
 ) -> bytes:
     """원본 컨테이너에서 지정 스트림들의 내용만 교체한 사본을 돌려준다.
 
-    allow_truncate에 포함된 스트림은 공간이 모자라면 잘라서 넣는다
-    (미리보기 텍스트처럼 잘려도 무방한 스트림용).
+    - resize에 든 스트림: 크기 필드/체인까지 정확히 줄인다.
+    - allow_truncate에 든 스트림: 공간이 모자라면 잘라서 넣는다.
+    - 그 외: 기존 크기 유지, 0 패딩.
     """
     cfb = _Cfb(container)
     for name, data in replacements.items():
+        if resize and name in resize:
+            cfb.patch_resize(name, data)
+            continue
         if allow_truncate and name in allow_truncate:
-            capacity = cfb.find_stream(name)["size"]
-            data = data[:capacity]
-        cfb.patch_stream(name, data)
+            data = data[: cfb.find_stream(name)["size"]]
+        cfb.patch_fixed(name, data)
     return bytes(cfb.data)

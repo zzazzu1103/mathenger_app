@@ -12,7 +12,7 @@ import sqlite3
 
 from . import db
 from .hwp.builder import WorksheetOptions, build_section, make_prvtext
-from .hwp.patcher import PatchTooLarge, patch_streams
+from .hwp.patcher import MINI_CUTOFF, PatchTooLarge, patch_streams, stream_info
 from .hwp.reader import HwpSource
 from .hwp.splitter import split_problems
 
@@ -52,6 +52,15 @@ def generate_worksheet(
     )
     compressed = source.compress_body(section, level=9)
 
+    # OLE 규격상 스트림은 크기(4096 기준)에 따라 놓이는 곳이 달라서,
+    # 새 본문이 너무 작으면 원본과 같은 쪽(일반 섹터)에 머물도록 부풀린다.
+    info = stream_info(original, "Section0")
+    if not info["is_mini"] and len(compressed) < MINI_CUTOFF:
+        compressed = source.compress_body(section, level=0)
+        while len(compressed) < MINI_CUTOFF and split.empty_para:
+            section = section + split.empty_para
+            compressed = source.compress_body(section, level=0)
+
     try:
         return patch_streams(
             original,
@@ -59,6 +68,7 @@ def generate_worksheet(
                 "Section0": compressed,
                 "PrvText": make_prvtext([p["text"] for p in problems]),
             },
+            resize={"Section0"},
             allow_truncate={"PrvText"},
         )
     except PatchTooLarge as exc:

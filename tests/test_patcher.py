@@ -71,3 +71,45 @@ def test_patch_only_touches_data_sectors():
         != original[512 + i * 512 : 512 + (i + 1) * 512]
     }
     assert len(diff_sectors) <= 18  # Big의 체인(9000/512=18섹터)만 변경
+
+
+def test_resize_big_stream():
+    original = _container({"Big": b"A" * 9000, "Other": b"B" * 5000})
+    patched = patch_streams(original, {"Big": b"C" * 4200}, resize={"Big"})
+    streams = _read_all(patched)
+    assert streams["Big"] == b"C" * 4200  # 크기 필드도 4200으로 갱신됨
+    assert streams["Other"] == b"B" * 5000
+
+
+def test_resize_mini_stream():
+    original = _container({"Mini": b"x" * 300, "Big": b"z" * 5000})
+    patched = patch_streams(original, {"Mini": b"n" * 70}, resize={"Mini"})
+    streams = _read_all(patched)
+    assert streams["Mini"] == b"n" * 70
+    assert streams["Big"] == b"z" * 5000
+
+
+def test_resize_rejects_cutoff_crossing():
+    from mathenger.hwp.patcher import PatchError
+
+    original = _container({"Big": b"A" * 9000})
+    with pytest.raises(PatchError):
+        patch_streams(original, {"Big": b"B" * 100}, resize={"Big"})  # big → mini 금지
+
+
+def test_resize_capacity_limit():
+    original = _container({"Big": b"A" * 9000})  # 체인 18섹터 = 9216B 용량
+    patched = patch_streams(original, {"Big": b"C" * 9200}, resize={"Big"})  # 커져도 용량 내면 OK
+    assert _read_all(patched)["Big"] == b"C" * 9200
+    with pytest.raises(PatchTooLarge):
+        patch_streams(original, {"Big": b"C" * 9300}, resize={"Big"})
+
+
+def test_stream_info():
+    from mathenger.hwp.patcher import stream_info
+
+    original = _container({"Big": b"A" * 9000, "Mini": b"m" * 100})
+    info = stream_info(original, "Big")
+    assert info["size"] == 9000 and not info["is_mini"] and info["capacity"] == 9216
+    info = stream_info(original, "Mini")
+    assert info["size"] == 100 and info["is_mini"] and info["capacity"] == 128

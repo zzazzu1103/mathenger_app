@@ -73,10 +73,17 @@ class HwpSource:
         return sum(1 for k in self.streams if k.startswith("BodyText/Section"))
 
     def compress_body(self, data: bytes, level: int = zlib.Z_DEFAULT_COMPRESSION) -> bytes:
+        """HWP 방식으로 압축한다: raw deflate + CRC32 + 원본 크기 (gzip 꼬리표).
+
+        한글은 이 8바이트 꼬리표로 무결성을 검증하므로 빠뜨리면
+        '손상된 파일'로 판정된다.
+        """
         if not self.compressed:
             return data
         co = zlib.compressobj(level=level, wbits=-15)
-        return co.compress(data) + co.flush()
+        deflated = co.compress(data) + co.flush()
+        footer = struct.pack("<II", zlib.crc32(data) & 0xFFFFFFFF, len(data) & 0xFFFFFFFF)
+        return deflated + footer
 
 
 def _clsid_to_bytes(clsid: str) -> bytes:
