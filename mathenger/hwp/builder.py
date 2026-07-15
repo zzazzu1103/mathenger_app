@@ -67,9 +67,36 @@ def build_section(
             body += empty_para * max(0, options.spacing)
 
     section = _dedupe_para_instance_ids(bytes(body))
+    section = _mark_last_paragraph(section)
     # 조립 결과가 올바른 레코드 스트림인지 검증 (깨진 파일 생성 방지)
     parse_records(section)
     return section
+
+
+def _mark_last_paragraph(section: bytes) -> bytes:
+    """최상위 문단 리스트의 종결 표시를 바로잡는다.
+
+    PARA_HEADER 첫 UINT32의 최상위 비트(0x80000000)는 '문단 리스트의
+    마지막 문단' 표시다. 한글은 이 종결 표시가 없는(또는 중간에 잘못
+    있는) 문서를 '손상된 파일'로 거부한다. 문서 중간에서 잘라 온
+    문단들로 조립하므로, 마지막 최상위 문단에만 표시를 세우고 나머지는
+    지운다. (표/글상자 안 문단 리스트는 블록 안에 원본 그대로 보존되어
+    이미 올바르다.)
+    """
+    records = parse_records(section)
+    tops = [r for r in records if r.tag == HWPTAG_PARA_HEADER and r.level == 0]
+    if not tops:
+        return section
+    out = bytearray(section)
+    for i, rec in enumerate(tops):
+        off = rec.pos + rec.header_len
+        (value,) = struct.unpack_from("<I", out, off)
+        if i == len(tops) - 1:
+            value |= 0x80000000
+        else:
+            value &= 0x7FFFFFFF
+        struct.pack_into("<I", out, off, value)
+    return bytes(out)
 
 
 def _dedupe_para_instance_ids(section: bytes) -> bytes:

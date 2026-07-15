@@ -72,3 +72,21 @@ def test_dedupe_para_instance_ids():
     assert ids[2] == 101          # 원본 유지
     assert len(set(ids)) == 4     # 전부 고유
     assert 102 not in (100, 101)  # 새 ID는 기존과 충돌하지 않음
+
+
+def test_mark_last_paragraph():
+    from mathenger.hwp.builder import _mark_last_paragraph
+
+    def para(first_dword, level=0):
+        payload = bytearray(24)
+        struct.pack_into("<I", payload, 0, first_dword)
+        return pack_record(66, level, bytes(payload))
+
+    # 중간에 잘못 남은 표시는 지우고, 마지막에만 세운다. 중첩(level>0)은 불변.
+    section = para(0x80000000 | 10) + para(0x80000000 | 5, level=2) + para(20)
+    out = _mark_last_paragraph(section)
+    records = parse_records(out)
+    values = [struct.unpack_from("<I", r.payload(out), 0)[0] for r in records]
+    assert values[0] == 10                    # 최상위 중간: 표시 제거, 글자수 보존
+    assert values[1] == 0x80000000 | 5        # 중첩 리스트는 그대로
+    assert values[2] == 0x80000000 | 20       # 마지막 최상위: 표시 세움
