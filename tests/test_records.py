@@ -54,3 +54,21 @@ def test_set_divide_sort():
     # 나머지 바이트는 그대로
     assert out[: 4 + 11] == blob[: 4 + 11]
     assert out[4 + 12 :] == blob[4 + 12 :]
+
+
+def test_dedupe_para_instance_ids():
+    from mathenger.hwp.builder import _dedupe_para_instance_ids
+
+    def para(instance_id):
+        payload = bytearray(24)
+        struct.pack_into("<I", payload, 18, instance_id)
+        return pack_record(66, 0, bytes(payload))
+
+    section = para(100) + para(100) + para(101) + para(100)
+    out = _dedupe_para_instance_ids(section)
+    records = parse_records(out)
+    ids = [struct.unpack_from("<I", r.payload(out), 18)[0] for r in records]
+    assert ids[0] == 100          # 첫 등장 유지
+    assert ids[2] == 101          # 원본 유지
+    assert len(set(ids)) == 4     # 전부 고유
+    assert 102 not in (100, 101)  # 새 ID는 기존과 충돌하지 않음

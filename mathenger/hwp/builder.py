@@ -66,10 +66,41 @@ def build_section(
         if options.separator == SEP_SPACING and empty_para:
             body += empty_para * max(0, options.spacing)
 
-    section = bytes(body)
+    section = _dedupe_para_instance_ids(bytes(body))
     # 조립 결과가 올바른 레코드 스트림인지 검증 (깨진 파일 생성 방지)
     parse_records(section)
     return section
+
+
+def _dedupe_para_instance_ids(section: bytes) -> bytes:
+    """복제로 생긴 중복 문단 instance ID에 새 고유값을 발급한다.
+
+    간격용 빈 문단이나 번호 문단은 같은 템플릿을 복제해 넣므로 문단
+    고유 번호(PARA_HEADER +18의 UINT32)가 중복된다. 한글은 문단 고유
+    번호가 중복된 문서를 '손상된 파일'로 거부하므로, 두 번째 이후
+    등장하는 중복 ID를 문서 안에서 유일한 값으로 바꾼다. 원본에서 온
+    문단들의 ID는 그대로 둔다 (첫 등장은 유지).
+    """
+    records = parse_records(section)
+    headers = [r for r in records if r.tag == HWPTAG_PARA_HEADER]
+    out = bytearray(section)
+    used = {
+        struct.unpack_from("<I", out, r.pos + r.header_len + 18)[0] for r in headers
+    }
+    seen: set[int] = set()
+    for rec in headers:
+        off = rec.pos + rec.header_len + 18
+        (instance_id,) = struct.unpack_from("<I", out, off)
+        if instance_id in seen:
+            fresh = (instance_id + 1) & 0xFFFFFFFF
+            while fresh in used:
+                fresh = (fresh + 1) & 0xFFFFFFFF
+            struct.pack_into("<I", out, off, fresh)
+            used.add(fresh)
+            seen.add(fresh)
+        else:
+            seen.add(instance_id)
+    return bytes(out)
 
 
 def build_worksheet(
