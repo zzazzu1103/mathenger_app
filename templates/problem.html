@@ -1,5 +1,17 @@
 {% extends "base.html" %}
 {% block title %}문제 상세 — Mathenger{% endblock %}
+
+{% block scripts %}
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [['\\(', '\\)']] },
+    startup: { typeset: true }
+  };
+</script>
+<script id="MathJax-script" async
+        src="{{ url_for('static', filename='vendor/mathjax/tex-svg.js') }}"></script>
+{% endblock %}
+
 {% block content %}
 
 <p><a href="javascript:history.back()">← 돌아가기</a></p>
@@ -10,8 +22,8 @@
 <div class="detail-grid">
   <section class="problem-text">
     <h3>문제 전체 미리보기</h3>
-    <p class="muted small">⟨ ⟩ 안은 수식 스크립트, 【 】은 조건 박스, 〔 〕은 글상자 내용입니다. 학습지에는 원본 모양 그대로 들어갑니다.</p>
-    <pre>{{ p['text'] }}</pre>
+    <p class="muted small">수식은 원본처럼 렌더링되고, 【 】은 조건 박스, 〔 〕은 글상자 내용입니다. 학습지에는 원본 모양 그대로 들어갑니다.</p>
+    <div class="preview-body">{{ preview }}</div>
     {% if n_images %}
       <h3>문제 그림</h3>
       {% for i in range(n_images) %}

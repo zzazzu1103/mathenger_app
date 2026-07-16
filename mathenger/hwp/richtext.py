@@ -43,8 +43,12 @@ class ProblemView:
     image_bin_ids: list[int] = field(default_factory=list)
 
 
-def extract_problem_view(blob: bytes) -> ProblemView:
-    """문제 블록(레코드 바이트)에서 전체 텍스트와 그림 ID 목록을 뽑는다."""
+def extract_problem_view(blob: bytes, latex: bool = False) -> ProblemView:
+    """문제 블록(레코드 바이트)에서 전체 텍스트와 그림 ID 목록을 뽑는다.
+
+    latex=True이면 수식을 ⟨스크립트⟩ 대신 \\( LaTeX \\) 로 감싸 반환한다
+    (브라우저 MathJax 렌더링용). False면 검색·평문 미리보기용.
+    """
     records = parse_records(blob)
     view = ProblemView()
     lines: list[str] = []
@@ -52,7 +56,7 @@ def extract_problem_view(blob: bytes) -> ProblemView:
     while i < len(records):
         rec = records[i]
         if rec.tag == HWPTAG_PARA_HEADER:
-            text, i = _render_para(blob, records, i, view)
+            text, i = _render_para(blob, records, i, view, latex)
             if text.strip():
                 lines.append(text.rstrip())
         else:
@@ -70,7 +74,8 @@ def _span_end(records: list[Record], start: int) -> int:
     return j
 
 
-def _render_para(blob: bytes, records: list[Record], start: int, view: ProblemView):
+def _render_para(blob: bytes, records: list[Record], start: int, view: ProblemView,
+                 latex: bool = False):
     """PARA_HEADER 하나(하위 포함)를 텍스트로 만든다. (text, 다음 인덱스) 반환."""
     para_level = records[start].level
     end = _span_end(records, start)
@@ -99,7 +104,7 @@ def _render_para(blob: bytes, records: list[Record], start: int, view: ProblemVi
             c = chars[p]
             if c in CTRL_ANCHOR_CODES:
                 if k < len(ctrls):
-                    inline, block = _render_ctrl(blob, records, ctrls[k], view)
+                    inline, block = _render_ctrl(blob, records, ctrls[k], view, latex)
                     out.append(inline)
                     if block:
                         blocks.append(block)
@@ -123,7 +128,8 @@ def _render_para(blob: bytes, records: list[Record], start: int, view: ProblemVi
     return text, end
 
 
-def _render_ctrl(blob: bytes, records: list[Record], idx: int, view: ProblemView):
+def _render_ctrl(blob: bytes, records: list[Record], idx: int, view: ProblemView,
+                 latex: bool = False):
     """CTRL_HEADER 하나를 (인라인 문자열, 블록 문자열) 로 렌더링."""
     cid = ctrl_id(records[idx].payload(blob))
     end = _span_end(records, idx)
@@ -131,7 +137,12 @@ def _render_ctrl(blob: bytes, records: list[Record], idx: int, view: ProblemView
     if cid == "eqed":
         for j in range(idx + 1, end):
             if records[j].tag == HWPTAG_EQEDIT:
-                return f"⟨{_eq_script(records[j].payload(blob))}⟩", ""
+                script = _eq_script(records[j].payload(blob))
+                if latex:
+                    from .eqscript import to_latex
+
+                    return f" \\({to_latex(script)}\\) ", ""
+                return f"⟨{script}⟩", ""
         return "⟨수식⟩", ""
 
     if cid in ("tbl ", "gso "):
@@ -157,7 +168,7 @@ def _render_ctrl(blob: bytes, records: list[Record], idx: int, view: ProblemView
             j = idx + 1
             while j < end:
                 if records[j].tag == HWPTAG_PARA_HEADER and records[j].level == shallowest:
-                    text, j = _render_para(blob, records, j, view)
+                    text, j = _render_para(blob, records, j, view, latex)
                     if text.strip():
                         inner_texts.append(text.strip())
                 else:

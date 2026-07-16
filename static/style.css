@@ -72,6 +72,7 @@ td.idea { color: #5b6478; font-size: .85rem; }
 @media (max-width: 800px) { .detail-grid { grid-template-columns: 1fr; } }
 .problem-text, .meta { background: #fff; border: 1px solid #e2e6ef; border-radius: 12px; padding: 1rem; }
 .problem-text pre { white-space: pre-wrap; font-family: inherit; line-height: 1.7; }
+.preview-body { white-space: pre-wrap; line-height: 1.9; font-size: 1.02rem; }
 .problem-img { max-width: 100%; border: 1px solid #e2e6ef; border-radius: 8px; margin: .4rem 0; display: block; }
 .view-link { text-decoration: none; color: #2f6fed; margin-right: .4rem; white-space: nowrap; }
 table.kv th { text-align: left; color: #5b6478; padding: .3rem .6rem .3rem 0; white-space: nowrap; vertical-align: top; }

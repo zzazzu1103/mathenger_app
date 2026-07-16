@@ -62,10 +62,13 @@
       <input type="number" name="spacing" value="2" min="0" max="20">
     </label>
     <label class="checkbox">
-      <input type="checkbox" name="numbering" checked> 문제 앞에 번호(1. 2. 3. …) 붙이기
+      <input type="checkbox" name="source_label" checked> 문제 위에 출처를 작고 흐린 글씨로 표시 (예: 2023 3월 교육청 9번)
     </label>
     <label class="checkbox">
-      <input type="checkbox" name="answer_page" checked> 마지막에 '정답 및 해설' 페이지 추가 (새 쪽에서 시작, 문제별 출처 표기)
+      <input type="checkbox" name="numbering"> 문제 앞에 번호(1. 2. 3. …) 붙이기 <span class="muted small">— 원본에 번호가 없을 때만 켜세요</span>
+    </label>
+    <label class="checkbox">
+      <input type="checkbox" name="answer_page" checked> 마지막에 '정답 및 해설' 페이지 추가 (새 쪽에서 시작)
     </label>
     <button type="submit" class="primary big" {% if multi_source %}disabled{% endif %}>📄 학습지 .hwp 다운로드</button>
   </form>

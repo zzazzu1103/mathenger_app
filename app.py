@@ -112,11 +112,14 @@ def problem_detail(problem_id: int):
         return redirect(url_for("index"))
     p = rows[0]
     try:
-        n_images = len(extract_problem_view(p["blob"]).image_bin_ids)
+        view = extract_problem_view(p["blob"], latex=True)
+        preview = view.text
+        n_images = len(view.image_bin_ids)
     except Exception:
+        preview = p["text"]
         n_images = 0
     return render_template("problem.html", p=p, cart=get_cart(),
-                           labels=db.META_LABELS, n_images=n_images)
+                           labels=db.META_LABELS, n_images=n_images, preview=preview)
 
 
 _stream_cache: dict[int, dict[str, bytes]] = {}
@@ -228,6 +231,7 @@ def generate():
         spacing=max(0, min(20, int(request.form.get("spacing", 2)))),
         numbering=request.form.get("numbering") == "on",
         answer_page=request.form.get("answer_page") == "on",
+        source_label=request.form.get("source_label") == "on",
     )
     try:
         data = generate_worksheet(conn, cart, options)

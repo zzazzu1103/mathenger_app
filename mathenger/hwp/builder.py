@@ -16,6 +16,7 @@ from .reader import HwpSource
 from .records import (
     DIVIDE_COLUMN,
     DIVIDE_PAGE,
+    HWPTAG_PARA_CHAR_SHAPE,
     HWPTAG_PARA_HEADER,
     HWPTAG_PARA_TEXT,
     pack_record,
@@ -33,9 +34,18 @@ SEP_SPACING = "spacing"  # 빈 문단 몇 개로 간격만 두기
 class WorksheetOptions:
     separator: str = SEP_COLUMN
     spacing: int = 2  # SEP_SPACING일 때 삽입할 빈 문단 수 / 그 외에는 문제 뒤 여백
-    numbering: bool = True  # 문제 앞에 "1." 번호 문단 삽입
+    numbering: bool = False  # 문제 앞에 "1." 번호 문단 삽입 (원본에 번호가 없을 때)
     number_format: str = "{n}."
     answer_page: bool = False  # 문서 끝에 '정답 및 해설' 페이지(새 쪽) 추가
+    source_label: bool = False  # 문제 위에 작고 흐린 출처 표시
+
+
+@dataclass
+class LabelStyle:
+    """출처 라벨 문단에 쓸 글자·문단 모양 ID (DocInfo에 미리 추가된 것)."""
+
+    char_shape_id: int
+    para_shape_id: int
 
 
 def build_section(
@@ -43,7 +53,8 @@ def build_section(
     problem_blobs: list[bytes],
     empty_para: bytes,
     options: WorksheetOptions | None = None,
-    answer_labels: list[str] | None = None,
+    source_labels: list[str] | None = None,
+    label_style: LabelStyle | None = None,
 ) -> bytes:
     """선택한 문제 블록들로 새 본문(Section) 레코드 스트림을 만든다."""
     options = options or WorksheetOptions()
@@ -51,25 +62,29 @@ def build_section(
         raise ValueError("선택된 문제가 없습니다.")
 
     divide_flag = {SEP_COLUMN: DIVIDE_COLUMN, SEP_PAGE: DIVIDE_PAGE}.get(options.separator)
+    use_labels = options.source_label and source_labels and label_style and empty_para
 
     body = bytearray(prologue)
     for i, blob in enumerate(problem_blobs):
         chunk = bytearray()
+        if use_labels:
+            chunk += _make_text_para(
+                empty_para, source_labels[i],
+                char_shape_id=label_style.char_shape_id,
+                para_shape_id=label_style.para_shape_id,
+            )
         if options.numbering and empty_para:
-            number_text = options.number_format.format(n=i + 1)
-            chunk += _make_text_para(empty_para, number_text)
-            chunk += blob
-        else:
-            chunk += blob
+            chunk += _make_text_para(empty_para, options.number_format.format(n=i + 1))
+        chunk += blob
         if i > 0 and divide_flag:
-            # 문제 묶음(번호 문단 포함)의 첫 문단에 나눔 플래그를 건다
+            # 문제 묶음(라벨·번호 포함)의 첫 문단에 나눔 플래그를 건다
             chunk = bytearray(set_divide_sort(bytes(chunk), divide_flag))
         body += chunk
         if options.separator == SEP_SPACING and empty_para:
             body += empty_para * max(0, options.spacing)
 
     if options.answer_page and empty_para:
-        body += _make_answer_page(empty_para, len(problem_blobs), answer_labels)
+        body += _make_answer_page(empty_para, len(problem_blobs))
 
     section = _dedupe_para_instance_ids(bytes(body))
     section = _mark_last_paragraph(section)
@@ -173,26 +188,37 @@ def build_worksheet(
     return writer.tobytes()
 
 
-def _make_answer_page(empty_para: bytes, n_problems: int, labels: list[str] | None) -> bytes:
+def _make_answer_page(empty_para: bytes, n_problems: int) -> bytes:
     """새 쪽에서 시작하는 '정답 및 해설' 페이지를 만든다.
 
-    제목 문단에 쪽 나누기 플래그를 걸고, 문제마다 번호(+출처) 문단과
-    답을 적을 빈 문단을 넣는다.
+    제목 문단에 쪽 나누기 플래그를 걸고, 문제마다 번호 문단과 답을 적을
+    빈 문단을 넣는다. (출처는 학습지 본문 쪽 라벨에서 표시하므로 제외)
     """
     title = _make_text_para(empty_para, "[ 정답 및 해설 ]")
     out = bytearray(set_divide_sort(title, DIVIDE_PAGE))
     out += empty_para
-    labels = labels or [f"{n + 1}." for n in range(n_problems)]
-    for label in labels:
-        out += _make_text_para(empty_para, label)
+    for n in range(n_problems):
+        out += _make_text_para(empty_para, f"{n + 1}.")
         out += empty_para * 2  # 답과 풀이를 적을 공간
     return bytes(out)
 
 
-def _make_text_para(empty_para_template: bytes, text: str) -> bytes:
+# PARA_HEADER 페이로드 오프셋: paraShapeId(u2)=8, charShapeCount(u2)=12
+_PS_PARASHAPE_OFF = 8
+_PS_CHARCOUNT_OFF = 12
+
+
+def _make_text_para(
+    empty_para_template: bytes,
+    text: str,
+    char_shape_id: int | None = None,
+    para_shape_id: int | None = None,
+) -> bytes:
     """빈 문단 템플릿을 복제해 짧은 텍스트 문단을 만든다.
 
-    글자 모양은 템플릿의 PARA_CHAR_SHAPE를 그대로 물려받는다.
+    char_shape_id/para_shape_id를 주면 그 글자·문단 모양을 적용한다
+    (출처 라벨처럼 작고 흐린 오른쪽정렬 문단용). 없으면 템플릿 모양을
+    그대로 물려받는다.
     """
     records = parse_records(empty_para_template)
     chars = text + "\r"
@@ -203,15 +229,24 @@ def _make_text_para(empty_para_template: bytes, text: str) -> bytes:
         raw = rec.raw(empty_para_template)
         if rec.tag == HWPTAG_PARA_HEADER:
             hdr = bytearray(raw)
-            # 텍스트 길이 필드 갱신 (최상위 비트는 유지)
             base = rec.header_len
             (old,) = struct.unpack_from("<I", hdr, base)
             struct.pack_into("<I", hdr, base, (old & 0x80000000) | len(chars))
+            if para_shape_id is not None:
+                struct.pack_into("<H", hdr, base + _PS_PARASHAPE_OFF, para_shape_id)
+            if char_shape_id is not None:
+                struct.pack_into("<H", hdr, base + _PS_CHARCOUNT_OFF, 1)
             out += hdr
             out += pack_record(HWPTAG_PARA_TEXT, rec.level + 1, payload)
             inserted = True
         elif rec.tag == HWPTAG_PARA_TEXT:
             continue  # 템플릿에 있었다면 교체됨
+        elif rec.tag == HWPTAG_PARA_CHAR_SHAPE and char_shape_id is not None:
+            # 문단 전체를 지정 글자 모양으로: (위치0, charShapeId) 한 쌍
+            out += pack_record(
+                HWPTAG_PARA_CHAR_SHAPE, rec.level,
+                struct.pack("<II", 0, char_shape_id),
+            )
         else:
             out += raw
     if not inserted:

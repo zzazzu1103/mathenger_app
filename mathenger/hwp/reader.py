@@ -72,6 +72,10 @@ class HwpSource:
     def section_count(self) -> int:
         return sum(1 for k in self.streams if k.startswith("BodyText/Section"))
 
+    def decompress(self, raw: bytes) -> bytes:
+        """압축 스트림(DocInfo 등)을 압축 해제한다."""
+        return zlib.decompress(raw, -15) if self.compressed else raw
+
     def compress_body(self, data: bytes, level: int = zlib.Z_DEFAULT_COMPRESSION) -> bytes:
         """HWP 방식으로 압축한다: raw deflate + CRC32 + 원본 크기 (gzip 꼬리표).
 

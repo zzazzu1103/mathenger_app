@@ -11,10 +11,16 @@ from __future__ import annotations
 import sqlite3
 
 from . import db
-from .hwp.builder import WorksheetOptions, build_section, make_prvtext
-from .hwp.patcher import MINI_CUTOFF, PatchTooLarge, patch_streams, stream_info
+from .hwp.builder import LabelStyle, WorksheetOptions, build_section
+from .hwp.docinfo import augment_for_source_label
+from .hwp.patcher import MINI_CUTOFF, PatchError, PatchTooLarge, patch_streams, stream_info
 from .hwp.reader import HwpSource
 from .hwp.splitter import split_problems
+
+
+def _source_label(p) -> str:
+    parts = [str(p[k]) for k in ("year", "month", "origin", "number") if p[k]]
+    return " ".join(parts)
 
 
 def generate_worksheet(
@@ -23,6 +29,7 @@ def generate_worksheet(
     options: WorksheetOptions | None = None,
 ) -> bytes:
     """선택한 문제 ID들(순서 유지)로 학습지 HWP 바이트를 만든다."""
+    options = options or WorksheetOptions()
     problems = db.get_problems(conn, problem_ids)
     if not problems:
         raise ValueError("선택된 문제가 없습니다.")
@@ -44,19 +51,35 @@ def generate_worksheet(
     source = HwpSource.from_bytes(original)
     split = split_problems(source.body_section())
 
-    answer_labels = []
-    for i, p in enumerate(problems):
-        origin = " ".join(
-            str(p[k]) for k in ("year", "month", "origin", "number") if p[k]
-        )
-        answer_labels.append(f"{i + 1}. ({origin})" if origin else f"{i + 1}.")
+    # 출처 라벨 옵션: DocInfo에 '작고 흐린 오른쪽정렬' 모양을 추가하고
+    # 그 ID로 라벨 문단을 만든다. DocInfo가 커져 제자리 패치가 불가능하면
+    # (미니/일반 스트림 경계를 넘으면) 라벨을 포기하고 계속 진행한다.
+    replacements: dict[str, bytes] = {}
+    resize = {"Section0"}
+    label_style: LabelStyle | None = None
+    source_labels = [_source_label(p) for p in problems]
+    if options.source_label and any(source_labels):
+        try:
+            new_di, char_id, para_id = augment_for_source_label(
+                source.decompress(source.streams["DocInfo"])
+            )
+            di_comp = source.compress_body(new_di, level=9)
+            di_info = stream_info(original, "DocInfo")
+            crosses = di_info["is_mini"] != (len(di_comp) < MINI_CUTOFF)
+            if not crosses and len(di_comp) <= di_info["capacity"]:
+                replacements["DocInfo"] = di_comp
+                resize.add("DocInfo")
+                label_style = LabelStyle(char_id, para_id)
+        except Exception:
+            label_style = None  # 라벨 실패는 치명적이지 않다
 
     section = build_section(
         prologue=split.prologue,
         problem_blobs=[p["blob"] for p in problems],
         empty_para=split.empty_para,
         options=options,
-        answer_labels=answer_labels,
+        source_labels=source_labels,
+        label_style=label_style,
     )
     compressed = source.compress_body(section, level=9)
 
@@ -69,16 +92,12 @@ def generate_worksheet(
             section = section + split.empty_para
             compressed = source.compress_body(section, level=0)
 
+    replacements["Section0"] = compressed
     # PrvText(미리보기 텍스트)는 건드리지 않는다: 재생성한 미리보기를 넣은
     # 파일만 한글에서 '손상된 파일'로 거부되는 것이 실사용 테스트로 확인됨.
-    # 원본 미리보기가 남는 것은 표시용일 뿐이며 한글에서 저장하면 갱신된다.
     try:
-        return patch_streams(
-            original,
-            {"Section0": compressed},
-            resize={"Section0"},
-        )
-    except PatchTooLarge as exc:
+        return patch_streams(original, replacements, resize=resize)
+    except (PatchTooLarge, PatchError) as exc:
         raise ValueError(
             "학습지 본문이 원본 문서보다 커서 만들 수 없습니다. "
             "문제 수를 줄여서 다시 시도해 주세요. "
