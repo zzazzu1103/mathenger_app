@@ -34,8 +34,6 @@ SEP_SPACING = "spacing"  # 빈 문단 몇 개로 간격만 두기
 class WorksheetOptions:
     separator: str = SEP_COLUMN
     spacing: int = 2  # SEP_SPACING일 때 삽입할 빈 문단 수 / 그 외에는 문제 뒤 여백
-    numbering: bool = False  # 문제 앞에 "1." 번호 문단 삽입 (원본에 번호가 없을 때)
-    number_format: str = "{n}."
     answer_page: bool = False  # 문서 끝에 '정답 및 해설' 페이지(새 쪽) 추가
     source_label: bool = False  # 문제 위에 작고 흐린 출처 표시
 
@@ -73,11 +71,9 @@ def build_section(
                 char_shape_id=label_style.char_shape_id,
                 para_shape_id=label_style.para_shape_id,
             )
-        if options.numbering and empty_para:
-            chunk += _make_text_para(empty_para, options.number_format.format(n=i + 1))
         chunk += blob
         if i > 0 and divide_flag:
-            # 문제 묶음(라벨·번호 포함)의 첫 문단에 나눔 플래그를 건다
+            # 문제 묶음(라벨 포함)의 첫 문단에 나눔 플래그를 건다
             chunk = bytearray(set_divide_sort(bytes(chunk), divide_flag))
         body += chunk
         if options.separator == SEP_SPACING and empty_para:
@@ -122,7 +118,7 @@ def _mark_last_paragraph(section: bytes) -> bytes:
 def _dedupe_para_instance_ids(section: bytes) -> bytes:
     """복제로 생긴 중복 문단 instance ID에 새 고유값을 발급한다.
 
-    간격용 빈 문단이나 번호 문단은 같은 템플릿을 복제해 넣므로 문단
+    간격용 빈 문단이나 라벨 문단은 같은 템플릿을 복제해 넣므로 문단
     고유 번호(PARA_HEADER +18의 UINT32)가 중복된다. 한글은 문단 고유
     번호가 중복된 문서를 '손상된 파일'로 거부하므로, 두 번째 이후
     등장하는 중복 ID를 문서 안에서 유일한 값으로 바꾼다. 원본에서 온

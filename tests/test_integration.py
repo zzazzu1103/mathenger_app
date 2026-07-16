@@ -52,9 +52,11 @@ def test_full_flow(conn):
 
     picked = [rows[0]["id"], rows[-1]["id"], rows[len(rows) // 2]["id"]]
     for separator in ("column", "page", "spacing"):
-        for numbering in (True, False):
+        for source_label in (True, False):
             out = generate_worksheet(
-                conn, picked, WorksheetOptions(separator=separator, numbering=numbering)
+                conn, picked,
+                WorksheetOptions(separator=separator, source_label=source_label,
+                                 answer_page=True),
             )
             ws = HwpSource.from_bytes(out)
             body = ws.body_section()

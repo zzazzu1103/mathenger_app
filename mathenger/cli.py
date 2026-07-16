@@ -35,7 +35,8 @@ def main(argv: list[str] | None = None) -> int:
     p_build.add_argument("output")
     p_build.add_argument("ids", nargs="+", type=int, help="문제 ID (순서대로)")
     p_build.add_argument("--separator", choices=["column", "page", "spacing"], default="column")
-    p_build.add_argument("--no-number", action="store_true")
+    p_build.add_argument("--source-label", action="store_true", help="문제 위에 출처 표시")
+    p_build.add_argument("--answer-page", action="store_true", help="정답 및 해설 페이지 추가")
 
     args = parser.parse_args(argv)
     conn = db.connect(args.db)
@@ -55,7 +56,11 @@ def main(argv: list[str] | None = None) -> int:
                   f'{r["subject"]}/{r["unit_mid"]} | {preview}')
 
     elif args.cmd == "build":
-        options = WorksheetOptions(separator=args.separator, numbering=not args.no_number)
+        options = WorksheetOptions(
+            separator=args.separator,
+            source_label=args.source_label,
+            answer_page=args.answer_page,
+        )
         data = generate_worksheet(conn, args.ids, options)
         Path(args.output).write_bytes(data)
         print(f"{args.output} 생성 ({len(data):,} bytes, 문제 {len(args.ids)}개)")

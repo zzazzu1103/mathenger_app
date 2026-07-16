@@ -229,7 +229,6 @@ def generate():
     options = WorksheetOptions(
         separator=separator,
         spacing=max(0, min(20, int(request.form.get("spacing", 2)))),
-        numbering=request.form.get("numbering") == "on",
         answer_page=request.form.get("answer_page") == "on",
         source_label=request.form.get("source_label") == "on",
     )
