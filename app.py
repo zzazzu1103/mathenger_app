@@ -9,6 +9,7 @@ import datetime
 import io
 import os
 import secrets
+import sys
 from pathlib import Path
 
 from flask import (
@@ -30,6 +31,16 @@ from mathenger.hwp.richtext import extract_problem_view
 from mathenger.importer import import_pair
 from mathenger.worksheet import generate_worksheet
 
+
+def _resource_base() -> str:
+    """templates/static의 실제 위치. PyInstaller exe로 묶였을 때도 동작."""
+    if getattr(sys, "frozen", False):
+        return sys._MEIPASS  # type: ignore[attr-defined]
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+_BASE = _resource_base()
+
 # 문제은행은 사용자 홈 폴더에 영구 보관한다. 앱 폴더를 지우거나
 # 새 버전을 내려받아도 등록한 문제들이 그대로 유지된다.
 INSTANCE_DIR = Path.home() / "Mathenger"
@@ -37,7 +48,11 @@ DB_PATH = INSTANCE_DIR / "mathenger.db"
 SECRET_PATH = INSTANCE_DIR / "secret_key"
 _LEGACY_DB = Path(__file__).parent / "instance" / "mathenger.db"
 
-app = Flask(__name__)
+app = Flask(
+    __name__,
+    template_folder=os.path.join(_BASE, "templates"),
+    static_folder=os.path.join(_BASE, "static"),
+)
 app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024  # 200MB 업로드 상한
 
 INSTANCE_DIR.mkdir(exist_ok=True)

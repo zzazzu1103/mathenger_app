@@ -1,0 +1,48 @@
+name: build-windows-exe
+
+# Windows 실행파일(Mathenger.exe)을 자동으로 빌드한다.
+# 브랜치에 푸시하거나 수동 실행(workflow_dispatch)하면 동작한다.
+on:
+  push:
+    branches: ["claude/math-problem-worksheet-app-gfwyui"]
+    paths-ignore: ["**.md"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 의존성 설치
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: exe 빌드
+        run: pyinstaller --clean --noconfirm Mathenger.spec
+
+      - name: 실행파일 업로드 (Actions 아티팩트)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mathenger-windows-exe
+          path: dist/Mathenger.exe
+          if-no-files-found: error
+
+      - name: 릴리스로 게시 (다운로드용)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete windows-exe --yes --cleanup-tag || true
+          gh release create windows-exe dist/Mathenger.exe \
+            --title "Mathenger (Windows 실행파일)" \
+            --notes "Python 설치 없이 실행되는 Windows용 exe입니다. Mathenger.exe를 내려받아 더블클릭하세요." \
+            --target "$GITHUB_SHA"

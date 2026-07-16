@@ -8,7 +8,17 @@
 > 문제 레코드(수식 개체·표·그림 포함)를 **바이트 그대로** 잘라 보관했다가
 > 새 HWP 파일로 재조립하기 때문입니다.
 
-## 쉬운 실행 (컴퓨터 잘 모르셔도 돼요)
+## 가장 쉬운 실행 — Windows 실행파일(.exe), Python 설치 불필요
+
+GitHub 저장소의 **Releases** 에서 `Mathenger.exe`를 내려받아 **더블클릭**하면
+바로 브라우저가 열립니다. Python이나 다른 설치가 전혀 필요 없습니다.
+(이 exe는 브랜치에 푸시할 때마다 GitHub Actions의 `build-windows-exe`
+워크플로가 Windows에서 자동으로 빌드해 Releases에 올립니다.)
+
+> 처음 실행 시 Windows SmartScreen 경고가 뜰 수 있습니다(서명 없는 개인 앱).
+> "추가 정보 → 실행"을 누르면 됩니다.
+
+## 쉬운 실행 (Python으로 직접)
 
 1. **Python 설치** — https://www.python.org/downloads/ 에서 내려받아 설치합니다.
    설치 첫 화면 맨 아래 **"Add python.exe to PATH"** 체크박스를 꼭 켜 주세요.
