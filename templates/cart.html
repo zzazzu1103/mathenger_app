@@ -64,6 +64,9 @@
     <label class="checkbox">
       <input type="checkbox" name="numbering" checked> 문제 앞에 번호(1. 2. 3. …) 붙이기
     </label>
+    <label class="checkbox">
+      <input type="checkbox" name="answer_page" checked> 마지막에 '정답 및 해설' 페이지 추가 (새 쪽에서 시작, 문제별 출처 표기)
+    </label>
     <button type="submit" class="primary big" {% if multi_source %}disabled{% endif %}>📄 학습지 .hwp 다운로드</button>
   </form>
 </section>

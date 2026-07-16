@@ -25,17 +25,26 @@ from flask import (
 
 from mathenger import db
 from mathenger.hwp.builder import SEP_COLUMN, SEP_PAGE, SEP_SPACING, WorksheetOptions
+from mathenger.hwp.reader import HwpSource
+from mathenger.hwp.richtext import extract_problem_view
 from mathenger.importer import import_pair
 from mathenger.worksheet import generate_worksheet
 
-INSTANCE_DIR = Path(__file__).parent / "instance"
+# 문제은행은 사용자 홈 폴더에 영구 보관한다. 앱 폴더를 지우거나
+# 새 버전을 내려받아도 등록한 문제들이 그대로 유지된다.
+INSTANCE_DIR = Path.home() / "Mathenger"
 DB_PATH = INSTANCE_DIR / "mathenger.db"
 SECRET_PATH = INSTANCE_DIR / "secret_key"
+_LEGACY_DB = Path(__file__).parent / "instance" / "mathenger.db"
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024  # 200MB 업로드 상한
 
 INSTANCE_DIR.mkdir(exist_ok=True)
+if _LEGACY_DB.exists() and not DB_PATH.exists():
+    import shutil
+
+    shutil.copy2(_LEGACY_DB, DB_PATH)  # 예전 위치에 있던 문제은행을 이어받는다
 if SECRET_PATH.exists():
     app.secret_key = SECRET_PATH.read_bytes()
 else:
@@ -101,8 +110,48 @@ def problem_detail(problem_id: int):
     if not rows:
         flash("문제를 찾을 수 없습니다.", "error")
         return redirect(url_for("index"))
-    return render_template("problem.html", p=rows[0], cart=get_cart(),
-                           labels=db.META_LABELS)
+    p = rows[0]
+    try:
+        n_images = len(extract_problem_view(p["blob"]).image_bin_ids)
+    except Exception:
+        n_images = 0
+    return render_template("problem.html", p=p, cart=get_cart(),
+                           labels=db.META_LABELS, n_images=n_images)
+
+
+_stream_cache: dict[int, dict[str, bytes]] = {}
+
+
+def _source_streams(source_id: int) -> dict[str, bytes]:
+    if source_id not in _stream_cache:
+        _stream_cache.clear()  # 원본은 커봐야 수 MB — 하나만 캐시
+        _stream_cache[source_id] = HwpSource.from_bytes(
+            db.get_source_file(get_db(), source_id)
+        ).streams
+    return _stream_cache[source_id]
+
+
+@app.route("/problem/<int:problem_id>/image/<int:index>")
+def problem_image(problem_id: int, index: int):
+    conn = get_db()
+    rows = db.get_problems(conn, [problem_id])
+    if not rows:
+        return "", 404
+    p = rows[0]
+    try:
+        bin_ids = extract_problem_view(p["blob"]).image_bin_ids
+        bin_id = bin_ids[index]
+    except Exception:
+        return "", 404
+    streams = _source_streams(p["source_id"])
+    prefix = f"BinData/BIN{bin_id:04X}."
+    for name, data in streams.items():
+        if name.startswith(prefix):
+            ext = name.rsplit(".", 1)[-1].lower()
+            mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+                    "bmp": "image/bmp", "gif": "image/gif"}.get(ext, "application/octet-stream")
+            return send_file(io.BytesIO(data), mimetype=mime)
+    return "", 404
 
 
 # ── 장바구니 ──────────────────────────────────────────────────
@@ -178,6 +227,7 @@ def generate():
         separator=separator,
         spacing=max(0, min(20, int(request.form.get("spacing", 2)))),
         numbering=request.form.get("numbering") == "on",
+        answer_page=request.form.get("answer_page") == "on",
     )
     try:
         data = generate_worksheet(conn, cart, options)

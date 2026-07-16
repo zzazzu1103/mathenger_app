@@ -59,7 +59,27 @@ def connect(path: str | Path) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """스키마/데이터 버전 올림. v2: 저장된 blob에서 전체 텍스트 재추출
+    (수식·표·글상자 내용을 미리보기와 검색에 포함시키기 위함)."""
+    (version,) = conn.execute("PRAGMA user_version").fetchone()
+    if version >= 2:
+        return
+    from .hwp.richtext import extract_problem_view
+
+    for row in conn.execute("SELECT id, blob FROM problems").fetchall():
+        try:
+            text = extract_problem_view(row["blob"]).text
+        except Exception:
+            continue
+        if text.strip():
+            conn.execute("UPDATE problems SET text = ? WHERE id = ?", (text, row["id"]))
+    conn.execute("PRAGMA user_version = 2")
+    conn.commit()
 
 
 def sha256(data: bytes) -> str:

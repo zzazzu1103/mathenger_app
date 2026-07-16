@@ -184,17 +184,32 @@ def split_problems(data: bytes) -> SplitResult:
                     f"페이지 끝까지를 한 문제로 묶었습니다."
                 )
 
-    problems = [
-        ProblemBlock(
-            seq=i + 1,
-            para_start=g[0].index,
-            para_end=g[-1].index,
-            blob=data[g[0].byte_start : g[-1].byte_end],
-            text=_clean_text(g),
+    problems = []
+    for i, g in enumerate(groups):
+        blob = data[g[0].byte_start : g[-1].byte_end]
+        problems.append(
+            ProblemBlock(
+                seq=i + 1,
+                para_start=g[0].index,
+                para_end=g[-1].index,
+                blob=blob,
+                text=_problem_text(blob, g),
+            )
         )
-        for i, g in enumerate(groups)
-    ]
     return SplitResult(prologue=prologue, problems=problems, empty_para=empty_para, warnings=warnings)
+
+
+def _problem_text(blob: bytes, paras: list[Paragraph]) -> str:
+    """수식·표·글상자 내용까지 담은 전체 텍스트. 실패하면 단순 텍스트."""
+    from .richtext import extract_problem_view
+
+    try:
+        rich = extract_problem_view(blob).text
+        if rich.strip():
+            return rich
+    except Exception:
+        pass
+    return _clean_text(paras)
 
 
 def _strip_and_add(groups: list[list[Paragraph]], block: list[Paragraph]) -> None:

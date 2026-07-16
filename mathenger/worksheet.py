@@ -44,11 +44,19 @@ def generate_worksheet(
     source = HwpSource.from_bytes(original)
     split = split_problems(source.body_section())
 
+    answer_labels = []
+    for i, p in enumerate(problems):
+        origin = " ".join(
+            str(p[k]) for k in ("year", "month", "origin", "number") if p[k]
+        )
+        answer_labels.append(f"{i + 1}. ({origin})" if origin else f"{i + 1}.")
+
     section = build_section(
         prologue=split.prologue,
         problem_blobs=[p["blob"] for p in problems],
         empty_para=split.empty_para,
         options=options,
+        answer_labels=answer_labels,
     )
     compressed = source.compress_body(section, level=9)
 

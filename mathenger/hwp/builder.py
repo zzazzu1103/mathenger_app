@@ -35,6 +35,7 @@ class WorksheetOptions:
     spacing: int = 2  # SEP_SPACING일 때 삽입할 빈 문단 수 / 그 외에는 문제 뒤 여백
     numbering: bool = True  # 문제 앞에 "1." 번호 문단 삽입
     number_format: str = "{n}."
+    answer_page: bool = False  # 문서 끝에 '정답 및 해설' 페이지(새 쪽) 추가
 
 
 def build_section(
@@ -42,6 +43,7 @@ def build_section(
     problem_blobs: list[bytes],
     empty_para: bytes,
     options: WorksheetOptions | None = None,
+    answer_labels: list[str] | None = None,
 ) -> bytes:
     """선택한 문제 블록들로 새 본문(Section) 레코드 스트림을 만든다."""
     options = options or WorksheetOptions()
@@ -65,6 +67,9 @@ def build_section(
         body += chunk
         if options.separator == SEP_SPACING and empty_para:
             body += empty_para * max(0, options.spacing)
+
+    if options.answer_page and empty_para:
+        body += _make_answer_page(empty_para, len(problem_blobs), answer_labels)
 
     section = _dedupe_para_instance_ids(bytes(body))
     section = _mark_last_paragraph(section)
@@ -166,6 +171,22 @@ def build_worksheet(
         writer.add_stream(name, data)
 
     return writer.tobytes()
+
+
+def _make_answer_page(empty_para: bytes, n_problems: int, labels: list[str] | None) -> bytes:
+    """새 쪽에서 시작하는 '정답 및 해설' 페이지를 만든다.
+
+    제목 문단에 쪽 나누기 플래그를 걸고, 문제마다 번호(+출처) 문단과
+    답을 적을 빈 문단을 넣는다.
+    """
+    title = _make_text_para(empty_para, "[ 정답 및 해설 ]")
+    out = bytearray(set_divide_sort(title, DIVIDE_PAGE))
+    out += empty_para
+    labels = labels or [f"{n + 1}." for n in range(n_problems)]
+    for label in labels:
+        out += _make_text_para(empty_para, label)
+        out += empty_para * 2  # 답과 풀이를 적을 공간
+    return bytes(out)
 
 
 def _make_text_para(empty_para_template: bytes, text: str) -> bytes:

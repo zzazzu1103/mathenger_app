@@ -103,4 +103,12 @@ MATHENGER_TEST_HWP=문제모음.hwp MATHENGER_TEST_XLSX=정리.xlsx python -m py
 | `app.py`, `templates/`, `static/` | Flask 웹 UI |
 | `mathenger/cli.py` | 명령줄 도구 |
 
-데이터는 `instance/mathenger.db`(SQLite)에 저장되며 원본 HWP 파일도 함께 보관됩니다.
+데이터는 사용자 홈 폴더의 `Mathenger/mathenger.db`(SQLite)에 영구 저장되며 원본
+HWP 파일도 함께 보관됩니다. 앱 폴더를 지우거나 새로 받아도 문제은행은 유지됩니다.
+
+### 주요 기능 요약
+
+- 검색 목록: 출처·단원·메인 아이디어·계산상의 포인트·표현상의 주의점 표시
+- 문제 상세: 수식 스크립트(⟨ ⟩)·조건 박스(【 】)·문제 그림까지 전체 미리보기
+- 학습지 옵션: 문제 번호 매기기, 단/쪽 나누기 배치, **'정답 및 해설' 페이지**
+  (새 쪽에서 시작, 문제별 출처 표기)

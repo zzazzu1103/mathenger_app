@@ -17,7 +17,7 @@ from .hwp.builder import WorksheetOptions
 from .importer import import_pair
 from .worksheet import generate_worksheet
 
-DEFAULT_DB = Path(__file__).parent.parent / "instance" / "mathenger.db"
+DEFAULT_DB = Path.home() / "Mathenger" / "mathenger.db"
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -9,9 +9,15 @@
 
 <div class="detail-grid">
   <section class="problem-text">
-    <h3>문제 본문 (텍스트 미리보기)</h3>
-    <p class="muted small">수식·그림 자리는 생략되어 보입니다. 실제 학습지에는 원본 그대로 들어갑니다.</p>
+    <h3>문제 전체 미리보기</h3>
+    <p class="muted small">⟨ ⟩ 안은 수식 스크립트, 【 】은 조건 박스, 〔 〕은 글상자 내용입니다. 학습지에는 원본 모양 그대로 들어갑니다.</p>
     <pre>{{ p['text'] }}</pre>
+    {% if n_images %}
+      <h3>문제 그림</h3>
+      {% for i in range(n_images) %}
+        <img class="problem-img" src="{{ url_for('problem_image', problem_id=p['id'], index=i) }}" alt="그림 {{ i + 1 }}">
+      {% endfor %}
+    {% endif %}
   </section>
 
   <section class="meta">

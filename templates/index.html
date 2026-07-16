@@ -42,7 +42,7 @@
     <thead>
       <tr>
         <th class="col-check"><input type="checkbox" onclick="document.querySelectorAll('.pchk').forEach(c=>c.checked=this.checked)"></th>
-        <th>출처</th><th>과목 / 단원</th><th>문제 미리보기</th><th>아이디어</th><th></th>
+        <th>출처</th><th>과목 / 단원</th><th>메인 아이디어</th><th>계산상의 포인트</th><th>표현상의 주의점</th><th></th>
       </tr>
     </thead>
     <tbody>
@@ -55,9 +55,11 @@
         </td>
         <td class="nowrap">{{ p['year'] }} {{ p['month'] }}<br>{{ p['origin'] }} {{ p['number'] }}</td>
         <td class="nowrap">{{ p['subject'] }}<br><small>{{ p['unit_mid'] }}{% if p['unit_small'] %} · {{ p['unit_small'] }}{% endif %}</small></td>
-        <td class="preview"><a href="{{ url_for('problem_detail', problem_id=p['id']) }}">{{ p['text'][:90] }}{% if p['text']|length > 90 %}…{% endif %}</a></td>
         <td class="idea">{{ p['idea'] }}</td>
+        <td class="idea">{{ p['calc_point'] }}</td>
+        <td class="idea">{{ p['caution'] }}</td>
         <td class="nowrap">
+          <a class="view-link" href="{{ url_for('problem_detail', problem_id=p['id']) }}">🔍 보기</a>
           {% if p['id'] not in cart %}
           <button type="submit" name="problem_id" value="{{ p['id'] }}" formaction="{{ url_for('cart_add') }}">담기</button>
           {% endif %}
