@@ -185,17 +185,14 @@ def build_worksheet(
 
 
 def _make_answer_page(empty_para: bytes, n_problems: int) -> bytes:
-    """새 쪽에서 시작하는 '정답 및 해설' 페이지를 만든다.
+    """새 쪽에서 시작하는 빈 '정답 및 해설' 페이지를 만든다.
 
-    제목 문단에 쪽 나누기 플래그를 걸고, 문제마다 번호 문단과 답을 적을
-    빈 문단을 넣는다. (출처는 학습지 본문 쪽 라벨에서 표시하므로 제외)
+    제목 문단에 쪽 나누기 플래그를 걸고, 답을 적을 빈 공간만 넣는다
+    (번호 없이). 필요한 만큼 문제 수에 비례해 빈 줄을 둔다.
     """
     title = _make_text_para(empty_para, "[ 정답 및 해설 ]")
     out = bytearray(set_divide_sort(title, DIVIDE_PAGE))
-    out += empty_para
-    for n in range(n_problems):
-        out += _make_text_para(empty_para, f"{n + 1}.")
-        out += empty_para * 2  # 답과 풀이를 적을 공간
+    out += empty_para * (2 + n_problems * 3)  # 답과 풀이를 적을 공간
     return bytes(out)
 
 

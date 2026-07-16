@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS problems (
     idea TEXT DEFAULT '',            -- 메인 아이디어
     calc_point TEXT DEFAULT '',      -- 계산상의 포인트
     caution TEXT DEFAULT '',         -- 표현상의 주의점
+    content_hash TEXT NOT NULL DEFAULT '',  -- 내용 중복 판별용 해시
     UNIQUE(source_id, seq)
 );
 
@@ -64,12 +65,20 @@ def connect(path: str | Path) -> sqlite3.Connection:
 
 
 def _migrate(conn: sqlite3.Connection) -> None:
-    """스키마/데이터 버전 올림. v2: 저장된 blob에서 전체 텍스트 재추출
-    (수식·표·글상자 내용을 미리보기와 검색에 포함시키기 위함)."""
+    """스키마/데이터 버전 올림.
+
+    v2: 저장된 blob에서 전체 텍스트 재추출(수식·표 내용 포함).
+    v3: content_hash 컬럼 추가·채움(문제 단위 중복 판별용).
+    """
     (version,) = conn.execute("PRAGMA user_version").fetchone()
-    if version >= 2:
+    if version >= 3:
         return
     from .hwp.richtext import extract_problem_view
+
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(problems)")}
+    if "content_hash" not in cols:
+        conn.execute("ALTER TABLE problems ADD COLUMN content_hash TEXT NOT NULL DEFAULT ''")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_problems_hash ON problems(content_hash)")
 
     for row in conn.execute("SELECT id, blob FROM problems").fetchall():
         try:
@@ -77,13 +86,32 @@ def _migrate(conn: sqlite3.Connection) -> None:
         except Exception:
             continue
         if text.strip():
-            conn.execute("UPDATE problems SET text = ? WHERE id = ?", (text, row["id"]))
-    conn.execute("PRAGMA user_version = 2")
+            conn.execute(
+                "UPDATE problems SET text = ?, content_hash = ? WHERE id = ?",
+                (text, content_key(text), row["id"]),
+            )
+    conn.execute("PRAGMA user_version = 3")
     conn.commit()
 
 
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def content_key(text: str) -> str:
+    """문제 내용 텍스트를 정규화한 뒤 해시. 같은 문제면 파일이 달라도 동일."""
+    import re
+
+    normalized = re.sub(r"\s+", " ", text or "").strip()
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def existing_content_hashes(conn: sqlite3.Connection) -> set[str]:
+    return {
+        r[0] for r in conn.execute(
+            "SELECT DISTINCT content_hash FROM problems WHERE content_hash != ''"
+        )
+    }
 
 
 def add_source(conn: sqlite3.Connection, name: str, file_bytes: bytes, n_problems: int) -> int:
@@ -103,13 +131,24 @@ def find_source_by_hash(conn: sqlite3.Connection, file_bytes: bytes):
 def add_problem(conn: sqlite3.Connection, source_id: int, seq: int, text: str,
                 blob: bytes, meta: dict[str, str]) -> int:
     fields = {k: str(meta.get(k, "") or "").strip() for k in META_FIELDS}
-    cols = ", ".join(["source_id", "seq", "text", "blob"] + META_FIELDS)
-    marks = ", ".join(["?"] * (4 + len(META_FIELDS)))
+    extra = ["text", "blob", "content_hash"]
+    cols = ", ".join(["source_id", "seq"] + extra + META_FIELDS)
+    marks = ", ".join(["?"] * (2 + len(extra) + len(META_FIELDS)))
     cur = conn.execute(
         f"INSERT INTO problems ({cols}) VALUES ({marks})",
-        [source_id, seq, text, blob] + [fields[k] for k in META_FIELDS],
+        [source_id, seq, text, blob, content_key(text)] + [fields[k] for k in META_FIELDS],
     )
     return cur.lastrowid
+
+
+def update_problem_meta(conn: sqlite3.Connection, problem_id: int, meta: dict[str, str]) -> None:
+    fields = {k: str(meta.get(k, "") or "").strip() for k in META_FIELDS}
+    assignments = ", ".join(f"{k} = ?" for k in META_FIELDS)
+    conn.execute(
+        f"UPDATE problems SET {assignments} WHERE id = ?",
+        [fields[k] for k in META_FIELDS] + [problem_id],
+    )
+    conn.commit()
 
 
 def search_problems(conn: sqlite3.Connection, keyword: str = "", **filters) -> list[sqlite3.Row]:

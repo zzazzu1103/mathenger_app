@@ -77,6 +77,14 @@ td.idea { color: #5b6478; font-size: .85rem; }
 .view-link { text-decoration: none; color: #2f6fed; margin-right: .4rem; white-space: nowrap; }
 table.kv th { text-align: left; color: #5b6478; padding: .3rem .6rem .3rem 0; white-space: nowrap; vertical-align: top; }
 table.kv td { padding: .3rem 0; }
+.cart-actions { margin-bottom: 1rem; }
+.meta-form label { display: block; font-size: .82rem; color: #5b6478; margin-bottom: .55rem; }
+.meta-form input, .meta-form textarea {
+  display: block; width: 100%; margin-top: .2rem; padding: .4rem .6rem;
+  border: 1px solid #cdd4e0; border-radius: 7px; font-size: .92rem; font-family: inherit;
+}
+.meta-form textarea { resize: vertical; }
+.meta-form button { margin-top: .3rem; }
 
 .import-help { background: #fff; border: 1px solid #e2e6ef; border-radius: 12px; padding: 1rem 1.2rem; }
 .import-form { background: #fff; border: 1px solid #e2e6ef; border-radius: 12px; padding: 1.2rem; margin-top: 1rem; }

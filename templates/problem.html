@@ -33,25 +33,33 @@
   </section>
 
   <section class="meta">
-    <h3>메타데이터</h3>
-    <table class="kv">
-      {% for key in ['subject','unit_major','unit_mid','unit_small','track','idea','calc_point','caution'] %}
-        {% if p[key] %}<tr><th>{{ labels[key] }}</th><td>{{ p[key] }}</td></tr>{% endif %}
-      {% endfor %}
-    </table>
+    <div class="cart-actions">
+      {% if p['id'] in cart %}
+        <form method="post" action="{{ url_for('cart_remove') }}" class="inline">
+          <input type="hidden" name="problem_id" value="{{ p['id'] }}">
+          <button class="danger">✔ 담김 — 빼기</button>
+        </form>
+      {% else %}
+        <form method="post" action="{{ url_for('cart_add') }}" class="inline">
+          <input type="hidden" name="problem_id" value="{{ p['id'] }}">
+          <button class="primary">이 문제 담기</button>
+        </form>
+      {% endif %}
+    </div>
 
-    {% if p['id'] in cart %}
-      <p>✔ 이미 담겨 있습니다.</p>
-      <form method="post" action="{{ url_for('cart_remove') }}">
-        <input type="hidden" name="problem_id" value="{{ p['id'] }}">
-        <button class="danger">장바구니에서 빼기</button>
-      </form>
-    {% else %}
-      <form method="post" action="{{ url_for('cart_add') }}">
-        <input type="hidden" name="problem_id" value="{{ p['id'] }}">
-        <button class="primary">이 문제 담기</button>
-      </form>
-    {% endif %}
+    <h3>메타데이터 <span class="muted small">— 직접 입력·수정하고 저장하세요</span></h3>
+    <form method="post" action="{{ url_for('problem_edit', problem_id=p['id']) }}" class="meta-form">
+      {% for key in ['year','month','origin','number','subject','track','unit_major','unit_mid','unit_small','idea','calc_point','caution'] %}
+        <label>{{ labels[key] }}
+          {% if key in ['idea','calc_point','caution'] %}
+            <textarea name="{{ key }}" rows="2">{{ p[key] }}</textarea>
+          {% else %}
+            <input type="text" name="{{ key }}" value="{{ p[key] }}">
+          {% endif %}
+        </label>
+      {% endfor %}
+      <button type="submit" class="primary">💾 메타데이터 저장</button>
+    </form>
   </section>
 </div>
 

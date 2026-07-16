@@ -157,6 +157,19 @@ def problem_image(problem_id: int, index: int):
     return "", 404
 
 
+@app.post("/problem/<int:problem_id>/edit")
+def problem_edit(problem_id: int):
+    conn = get_db()
+    rows = db.get_problems(conn, [problem_id])
+    if not rows:
+        flash("문제를 찾을 수 없습니다.", "error")
+        return redirect(url_for("index"))
+    meta = {k: request.form.get(k, "").strip() for k in db.META_FIELDS}
+    db.update_problem_meta(conn, problem_id, meta)
+    flash("메타데이터를 저장했습니다.", "info")
+    return redirect(url_for("problem_detail", problem_id=problem_id))
+
+
 # ── 장바구니 ──────────────────────────────────────────────────
 
 
@@ -273,11 +286,15 @@ def import_view():
         except ValueError as exc:
             flash(str(exc), "error")
             return redirect(url_for("import_view"))
-        flash(
-            f"'{report.source_name}'에서 문제 {report.n_problems}개를 가져왔고 "
-            f"{report.n_matched}개에 메타데이터를 연결했습니다.",
-            "info",
+        msg = (
+            f"'{report.source_name}': 문제 {report.n_problems}개 중 "
+            f"{report.n_added}개를 새로 등록했습니다."
         )
+        if report.n_skipped:
+            msg += f" (이미 있는 {report.n_skipped}개는 건너뜀)"
+        if report.n_matched:
+            msg += f" 메타데이터 {report.n_matched}개 연결."
+        flash(msg, "info")
         for warning in report.warnings:
             flash(warning, "warn")
         return redirect(url_for("index"))

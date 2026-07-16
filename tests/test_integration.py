@@ -74,8 +74,28 @@ def test_full_flow(conn):
             assert got_eq == expected_eq
 
 
-def test_duplicate_import_rejected(conn):
+def test_duplicate_import_skips_problems(conn):
+    hwp = _read(HWP_PATH)
+    first = import_pair(conn, "a.hwp", hwp, None)
+    assert first.n_added == first.n_problems
+    assert first.n_skipped == 0
+
+    # 같은 문서를 다시 넣으면 전부 중복으로 걸러지고 새 원본은 생기지 않는다
+    second = import_pair(conn, "b.hwp", hwp, None)
+    assert second.n_added == 0
+    assert second.n_skipped == second.n_problems
+    assert second.source_id == 0
+
+    from mathenger import db as _db
+    assert len(_db.list_sources(conn)) == 1
+
+
+def test_metadata_edit(conn):
+    from mathenger import db as _db
+
     hwp = _read(HWP_PATH)
     import_pair(conn, "a.hwp", hwp, None)
-    with pytest.raises(ValueError):
-        import_pair(conn, "b.hwp", hwp, None)
+    pid = _db.search_problems(conn)[0]["id"]
+    _db.update_problem_meta(conn, pid, {"subject": "미적분1", "idea": "테스트 아이디어"})
+    row = _db.get_problems(conn, [pid])[0]
+    assert row["subject"] == "미적분1" and row["idea"] == "테스트 아이디어"
